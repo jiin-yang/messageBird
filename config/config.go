@@ -32,7 +32,7 @@ func New() (*Config, error) {
 
 	err := viper.ReadInConfig()
 	if err != nil {
-		log.Fatal().Err(err).Msgf("Config file read error: %s", err)
+		log.Fatal().Err(err)
 		return nil, err
 	}
 

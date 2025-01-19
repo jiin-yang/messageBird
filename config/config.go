@@ -33,7 +33,7 @@ func New() (*Config, error) {
 
 	err := viper.ReadInConfig()
 	if err != nil {
-		log.Fatal().Err(err)
+		log.Error().Msg("Could not read the .env config file.")
 		return nil, err
 	}
 

@@ -3,17 +3,19 @@ package server
 import (
 	"fmt"
 	"github.com/jiin-yang/messageBird/config"
+	"github.com/jiin-yang/messageBird/internal/infra/repository/mongoDB"
+	"github.com/jiin-yang/messageBird/internal/message"
 	mw "github.com/jiin-yang/messageBird/internal/middleware"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
-	"github.com/labstack/gommon/log"
 	"github.com/ory/graceful"
+	"github.com/rs/zerolog/log"
 	"net/http"
 	"strings"
 )
 
 type Server struct {
-	e      *echo.Echo
+	echo   *echo.Echo
 	config *config.Config
 }
 
@@ -38,21 +40,38 @@ func New(c *config.Config) *Server {
 		},
 	}))
 
-	server.e = e
+	server.echo = e
 	server.config = c
 
 	return server
 }
 
-func (s *Server) Start() error {
-	s.e.Server.Addr = fmt.Sprintf(":%d", s.config.ServerConfig.Port)
+func (server *Server) Start() error {
+	server.echo.Server.Addr = fmt.Sprintf(":%d", server.config.ServerConfig.Port)
 
-	log.Info("Server Start Successfully!")
-	s.e.GET("/health", s.healthCheck)
-	return graceful.Graceful(s.e.Server.ListenAndServe, s.e.Server.Shutdown)
+	mongoClient, err := mongoDB.NewClient(&server.config.MongoDBConfig)
+	if err != nil {
+		log.Fatal().Err(err)
+	}
+
+	messageRepository := mongoDB.NewMessageRepository(&mongoDB.NewMessageRepositoryOpts{
+		Client: mongoClient,
+	})
+
+	messageUseCase := message.NewUseCase(&message.NewUseCaseOptions{
+		Repo: messageRepository,
+	})
+
+	message.NewHandler(server.echo, messageUseCase)
+
+	log.Info().Msg("Server Start Successfully!")
+
+	server.echo.GET("/health", server.healthCheck)
+
+	return graceful.Graceful(server.echo.Server.ListenAndServe, server.echo.Server.Shutdown)
 }
 
-func (s *Server) healthCheck(ctx echo.Context) error {
-	log.Info("Success health check!")
+func (server *Server) healthCheck(ctx echo.Context) error {
+	log.Info().Msg("Success health check!")
 	return ctx.NoContent(http.StatusNoContent)
 }

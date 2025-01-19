@@ -21,6 +21,7 @@ type ServerConfig struct {
 
 type MongoDBConfig struct {
 	Host string
+	Name string
 }
 
 func New() (*Config, error) {
@@ -44,6 +45,7 @@ func New() (*Config, error) {
 	}
 	config.MongoDBConfig = MongoDBConfig{
 		Host: viper.GetString("MONGODB_HOST"),
+		Name: viper.GetString("MONGODB_NAME"),
 	}
 
 	return config, nil

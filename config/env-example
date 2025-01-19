@@ -3,3 +3,4 @@ ENV=LOCAL
 PORT=8080
 
 MONGODB_HOST=mongodb://localhost:27017
+MONGODB_NAME=message_bird

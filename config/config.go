@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
 )
@@ -37,6 +38,19 @@ func New() (*Config, error) {
 		return nil, err
 	}
 
+	requiredKeys := []string{
+		"PORT",
+		"MONGODB_HOST",
+		"MONGODB_NAME",
+	}
+
+	missingKeys := checkMissingKeys(requiredKeys)
+	if len(missingKeys) > 0 {
+		errMsg := fmt.Sprintf("Missing required configuration keys: %v", missingKeys)
+		log.Error().Msg(errMsg)
+		return nil, fmt.Errorf(errMsg)
+	}
+
 	config.AppConfig = AppConfig{
 		AppName: viper.GetString("APPNAME"),
 	}
@@ -49,4 +63,14 @@ func New() (*Config, error) {
 	}
 
 	return config, nil
+}
+
+func checkMissingKeys(keys []string) []string {
+	var missingKeys []string
+	for _, key := range keys {
+		if !viper.IsSet(key) || viper.GetString(key) == "" {
+			missingKeys = append(missingKeys, key)
+		}
+	}
+	return missingKeys
 }

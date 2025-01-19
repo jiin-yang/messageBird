@@ -2,6 +2,7 @@ package message
 
 import (
 	"github.com/labstack/echo/v4"
+	"github.com/rs/zerolog/log"
 	"net/http"
 )
 
@@ -46,7 +47,13 @@ func (h *handler) createMessage(ctx echo.Context) error {
 
 	msgResponse, err := h.useCase.CreateMessage(ctx.Request().Context(), *requestDto)
 	if err != nil {
-		return echo.NewHTTPError(http.StatusInternalServerError, "failed to create message").
+		log.Error().
+			Err(err).
+			Str("method", "CreateMessage").
+			Str("phoneNumber", requestDto.PhoneNumber).
+			Msg("failed to create message")
+
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error()).
 			SetInternal(err)
 	}
 

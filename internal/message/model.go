@@ -30,12 +30,21 @@ func (s Status) String() string {
 }
 
 type Message struct {
+	Id          string
+	PhoneNumber string
+	Content     string
+	Status
+	CreatedAt *time.Time
+	UpdatedAt *time.Time
+}
+
+type CreateMessage struct {
 	PhoneNumber string
 	Content     string
 	Status
 }
 
-type CreatedMessage struct {
+type CreatedMessageDbResponse struct {
 	CreatedAt   *time.Time
 	Id          string
 	PhoneNumber string

@@ -5,11 +5,13 @@ import (
 	"github.com/jiin-yang/messageBird/internal/message"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
+	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"time"
 )
 
 const (
 	messagesCollection = "messages"
+	getMessageLimit    = 2
 )
 
 type repo struct {
@@ -28,7 +30,7 @@ func NewMessageRepository(opts *NewMessageRepositoryOpts) message.Repository {
 	}
 }
 
-func (r repo) CreateMessage(ctx context.Context, msgData message.Message) (*message.CreatedMessage, error) {
+func (r repo) CreateMessage(ctx context.Context, msgData message.CreateMessage) (*message.CreatedMessageDbResponse, error) {
 	objID := bson.NewObjectID()
 	timeNow := time.Now()
 
@@ -48,7 +50,7 @@ func (r repo) CreateMessage(ctx context.Context, msgData message.Message) (*mess
 	insertedID := insertResult.InsertedID.(bson.ObjectID)
 	idStr := insertedID.Hex()
 
-	createdMessage := message.CreatedMessage{
+	createdMessage := message.CreatedMessageDbResponse{
 		Id:          idStr,
 		PhoneNumber: msgData.PhoneNumber,
 		Content:     msgData.Content,
@@ -57,4 +59,47 @@ func (r repo) CreateMessage(ctx context.Context, msgData message.Message) (*mess
 	}
 
 	return &createdMessage, nil
+}
+
+func (r repo) GetOldestStatusNewMessages(ctx context.Context) ([]message.Message, error) {
+	filter := bson.M{"status": message.New}
+
+	// NOT: Sort isleminde neden `_id` kullandim ?
+	// mongoDB object id'si time bazli oldugu icin ve indexli oldugu icin createdAt yerine _id kullanmayi uygun gordum
+	// Eger ki Create isleminin birden fazla server, client veya instance tarafindan yapilacagi bir senaryo olsa idi
+	// createdAt alanini kullanirdim.
+	findOpts := options.Find().
+		SetSort(bson.D{{Key: "_id", Value: 1}}).
+		SetLimit(getMessageLimit)
+
+	cur, err := r.collection.Find(ctx, filter, findOpts)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	var result []message.Message
+
+	for cur.Next(ctx) {
+		var dbMsg Message
+		if decodeErr := cur.Decode(&dbMsg); decodeErr != nil {
+			return nil, decodeErr
+		}
+
+		msg := message.Message{
+			Id:          dbMsg.ID.Hex(),
+			PhoneNumber: dbMsg.PhoneNumber,
+			Content:     dbMsg.Content,
+			Status:      dbMsg.Status,
+			CreatedAt:   dbMsg.CreatedAt,
+		}
+
+		result = append(result, msg)
+	}
+
+	if err = cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
 }

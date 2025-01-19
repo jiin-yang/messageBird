@@ -4,6 +4,7 @@ import "context"
 
 type UseCase interface {
 	CreateMessage(ctx context.Context, requestMsg CreateMessageRequest) (*CreateMessageResponse, error)
+	GetOldestStatusNewMessages(ctx context.Context) ([]Message, error)
 }
 
 type useCase struct {
@@ -21,7 +22,7 @@ func NewUseCase(opts *NewUseCaseOptions) UseCase {
 }
 
 func (u useCase) CreateMessage(ctx context.Context, requestMsg CreateMessageRequest) (*CreateMessageResponse, error) {
-	msg := Message{
+	msg := CreateMessage{
 		PhoneNumber: requestMsg.PhoneNumber,
 		Content:     requestMsg.Content,
 		Status:      New,
@@ -41,4 +42,12 @@ func (u useCase) CreateMessage(ctx context.Context, requestMsg CreateMessageRequ
 	}
 
 	return &createdMsgRes, err
+}
+
+func (u useCase) GetOldestStatusNewMessages(ctx context.Context) ([]Message, error) {
+	messages, err := u.repo.GetOldestStatusNewMessages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return messages, err
 }

@@ -5,5 +5,6 @@ import (
 )
 
 type Repository interface {
-	CreateMessage(ctx context.Context, message Message) (*CreatedMessage, error)
+	CreateMessage(ctx context.Context, message CreateMessage) (*CreatedMessageDbResponse, error)
+	GetOldestStatusNewMessages(ctx context.Context) ([]Message, error)
 }

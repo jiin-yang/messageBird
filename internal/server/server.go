@@ -26,6 +26,7 @@ func New(c *config.Config) *Server {
 	e.HideBanner = true
 
 	e.Validator = NewValidator()
+
 	e.Use(middleware.Recover())
 	e.Use(mw.CommonHeaderSetterMiddleware)
 	e.Use(middleware.CORS())
@@ -39,6 +40,8 @@ func New(c *config.Config) *Server {
 			return false
 		},
 	}))
+
+	e.HTTPErrorHandler = customErrorHandler
 
 	server.echo = e
 	server.config = c

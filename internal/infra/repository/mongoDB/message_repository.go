@@ -2,6 +2,7 @@ package mongoDB
 
 import (
 	"context"
+	"fmt"
 	"github.com/jiin-yang/messageBird/internal/message"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -102,4 +103,25 @@ func (r repo) GetOldestStatusNewMessages(ctx context.Context) ([]message.Message
 	}
 
 	return result, nil
+}
+func (r repo) UpdateMessageStatus(ctx context.Context, messageID string, newStatus message.Status) error {
+	objID, err := bson.ObjectIDFromHex(messageID)
+	if err != nil {
+		return fmt.Errorf("invalid message ID: %w", err)
+	}
+
+	filter := bson.M{"_id": objID}
+	update := bson.M{
+		"$set": bson.M{
+			"status":    newStatus,
+			"updatedAt": time.Now(),
+		},
+	}
+
+	_, err = r.collection.UpdateOne(ctx, filter, update)
+	if err != nil {
+		return fmt.Errorf("failed to update message status: %w", err)
+	}
+
+	return nil
 }

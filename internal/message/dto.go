@@ -1,6 +1,8 @@
 package message
 
-import "time"
+import (
+	"time"
+)
 
 type CreateMessageRequest struct {
 	PhoneNumber string `json:"phoneNumber" validate:"required,e164"`

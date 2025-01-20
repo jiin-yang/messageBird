@@ -3,6 +3,7 @@ package server
 import (
 	"fmt"
 	"github.com/jiin-yang/messageBird/config"
+	"github.com/jiin-yang/messageBird/internal/client/webhook"
 	"github.com/jiin-yang/messageBird/internal/infra/repository/mongoDB"
 	"github.com/jiin-yang/messageBird/internal/message"
 	mw "github.com/jiin-yang/messageBird/internal/middleware"
@@ -57,15 +58,23 @@ func (server *Server) Start() error {
 		log.Fatal().Err(err)
 	}
 
+	webhookClient := webhook.NewWebhookClient(&webhook.NewClientOptions{
+		URL: server.config.WebhookConfig.URL,
+	})
+
 	messageRepository := mongoDB.NewMessageRepository(&mongoDB.NewMessageRepositoryOpts{
 		Client: mongoClient,
 	})
 
 	messageUseCase := message.NewUseCase(&message.NewUseCaseOptions{
-		Repo: messageRepository,
+		Repo:    messageRepository,
+		Webhook: webhookClient,
 	})
 
-	message.NewHandler(server.echo, messageUseCase)
+	cronJob := message.NewCron(messageUseCase)
+	defer cronJob.StopCron()
+
+	message.NewHandler(server.echo, messageUseCase, cronJob)
 
 	log.Info().Msg("Server Start Successfully!")
 

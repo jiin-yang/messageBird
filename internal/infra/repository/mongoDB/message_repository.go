@@ -125,3 +125,38 @@ func (r repo) UpdateMessageStatus(ctx context.Context, messageID string, newStat
 
 	return nil
 }
+
+func (r repo) GetSentStatusMessages(ctx context.Context) ([]message.Message, error) {
+	filter := bson.M{"status": message.Sent}
+
+	cur, err := r.collection.Find(ctx, filter)
+	if err != nil {
+		return nil, err
+	}
+	defer cur.Close(ctx)
+
+	var result []message.Message
+
+	for cur.Next(ctx) {
+		var dbMsg Message
+		if decodeErr := cur.Decode(&dbMsg); decodeErr != nil {
+			return nil, decodeErr
+		}
+
+		msg := message.Message{
+			Id:          dbMsg.ID.Hex(),
+			PhoneNumber: dbMsg.PhoneNumber,
+			Content:     dbMsg.Content,
+			Status:      dbMsg.Status,
+			CreatedAt:   dbMsg.CreatedAt,
+		}
+
+		result = append(result, msg)
+	}
+
+	if err = cur.Err(); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}

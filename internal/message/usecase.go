@@ -12,6 +12,7 @@ type UseCase interface {
 	CreateMessage(ctx context.Context, requestMsg CreateMessageRequest) (*CreateMessageResponse, error)
 	GetOldestStatusNewMessages(ctx context.Context) ([]Message, error)
 	SendMessages(ctx context.Context) error
+	GetSentStatusMessages(ctx context.Context) ([]GetMessageResponse, error)
 	StartConsumeFailures(ctx context.Context, maxRetries int)
 	StopConsumeFailures()
 }
@@ -93,11 +94,16 @@ func (u *useCase) SendMessages(ctx context.Context) error {
 		if err != nil {
 			log.Error().Err(err).Str("messageId", message.Id).Msg("Failed to send message to webhook")
 
+			err = u.repo.UpdateMessageStatus(ctx, message.Id, Fail)
+			if err != nil {
+				log.Error().Err(err).Str("messageId", message.Id).Msg("Failed to update message status to 'Fail'")
+			}
+
 			failedMsg := rabbitmq.FailedMessage{
 				MessageID:   message.Id,
 				PhoneNumber: message.PhoneNumber,
 				Content:     message.Content,
-				Status:      uint8(Process),
+				Status:      uint8(Fail),
 			}
 			pubErr := u.rabbitMQ.PublishFailMessage(ctx, failedMsg)
 			if pubErr != nil {
@@ -120,6 +126,27 @@ func (u *useCase) SendMessages(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func (u *useCase) GetSentStatusMessages(ctx context.Context) ([]GetMessageResponse, error) {
+	messages, err := u.repo.GetSentStatusMessages(ctx)
+	if err != nil {
+		return nil, err
+	}
+	respMessages := []GetMessageResponse{}
+	var respMsg GetMessageResponse
+	for _, msg := range messages {
+		respMsg.Id = msg.Id
+		respMsg.Content = msg.Content
+		respMsg.Status = msg.Status.String()
+		respMsg.PhoneNumber = msg.PhoneNumber
+		respMsg.CreatedAt = msg.CreatedAt
+		respMsg.UpdatedAt = msg.UpdatedAt
+
+		respMessages = append(respMessages, respMsg)
+	}
+
+	return respMessages, nil
 }
 
 func (u *useCase) StartConsumeFailures(ctx context.Context, maxRetries int) {

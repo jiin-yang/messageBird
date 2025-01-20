@@ -70,7 +70,7 @@ func (h *handler) startCron(ctx echo.Context) error {
 	if h.cron.IsRunning {
 		log.Warn().Msg("Cron job is already running - handler")
 		return ctx.JSON(http.StatusConflict, map[string]string{
-			"message": "Cron job is already running - handler",
+			"message": "Cron job is already running",
 		})
 	}
 
@@ -81,7 +81,7 @@ func (h *handler) startCron(ctx echo.Context) error {
 	}()
 
 	return ctx.JSON(http.StatusOK, map[string]string{
-		"message": "Cron job and RabbitMQ consumer are starting asynchronously - handler",
+		"message": "Cron job and RabbitMQ consumer are starting asynchronously",
 	})
 }
 
@@ -89,7 +89,7 @@ func (h *handler) stopCron(ctx echo.Context) error {
 	if !h.cron.IsRunning {
 		log.Warn().Msg("Cron job is not running - handler")
 		return ctx.JSON(http.StatusConflict, map[string]string{
-			"message": "Cron job is not running - handler",
+			"message": "Cron job is not running",
 		})
 	}
 
@@ -98,7 +98,7 @@ func (h *handler) stopCron(ctx echo.Context) error {
 
 	log.Info().Msg("Cron job stopped - handler")
 	return ctx.JSON(http.StatusOK, map[string]string{
-		"message": "Cron job stopped successfully - handler",
+		"message": "Cron job stopped successfully",
 	})
 }
 
@@ -107,10 +107,19 @@ func (h *handler) stopQueue(ctx echo.Context) error {
 
 	log.Info().Msg("RabbitMQ consumer stopped - handler")
 	return ctx.JSON(http.StatusOK, map[string]string{
-		"message": "RabbitMQ consumer stopped successfully - handler",
+		"message": "RabbitMQ consumer stopped successfully",
 	})
 }
 
 func (h *handler) getSentMessages(ctx echo.Context) error {
-	return nil
+	messages, err := h.useCase.GetSentStatusMessages(ctx.Request().Context())
+	if err != nil {
+		log.Error().
+			Err(err).
+			Msg("failed to get sent messages - handler")
+
+		return echo.NewHTTPError(http.StatusInternalServerError, err.Error()).
+			SetInternal(err)
+	}
+	return ctx.JSON(http.StatusOK, messages)
 }

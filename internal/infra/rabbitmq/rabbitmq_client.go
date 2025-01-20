@@ -3,6 +3,7 @@ package rabbitmq
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/rabbitmq/amqp091-go"
 	"github.com/rs/zerolog/log"
 	"time"
@@ -41,29 +42,25 @@ type client struct {
 }
 
 func NewRabbitMQClient(amqpURL, failQueueName string) (Client, error) {
-	conn, err := amqp091.Dial(amqpURL)
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to connect to RabbitMQ via amqp091-go")
-		return nil, err
+	for i := 0; i < 5; i++ {
+		conn, err := amqp091.Dial(amqpURL)
+		if err == nil {
+			ch, err := conn.Channel()
+			if err == nil {
+				_, err = ch.QueueDeclare(failQueueName, true, false, false, false, nil)
+				if err == nil {
+					return &client{conn: conn, channel: ch, failQueueName: failQueueName}, nil
+				}
+			}
+			log.Warn().Err(err).Msg("Retrying RabbitMQ connection...")
+			time.Sleep(5 * time.Second)
+		} else {
+			log.Warn().Err(err).Msg("Failed to connect to RabbitMQ, retrying...")
+			time.Sleep(5 * time.Second)
+		}
 	}
 
-	ch, err := conn.Channel()
-	if err != nil {
-		log.Error().Err(err).Msg("Failed to open a channel in RabbitMQ")
-		return nil, err
-	}
-
-	_, err = ch.QueueDeclare(failQueueName, true, false, false, false, nil)
-	if err != nil {
-		log.Error().Err(err).Str("queue", failQueueName).Msg("Failed to declare fail_messages queue")
-		return nil, err
-	}
-
-	return &client{
-		conn:          conn,
-		channel:       ch,
-		failQueueName: failQueueName,
-	}, nil
+	return nil, fmt.Errorf("could not connect to RabbitMQ after retries")
 }
 
 func (c *client) PublishFailMessage(ctx context.Context, msg FailedMessage) error {

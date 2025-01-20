@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
+	"os"
 )
 
 type Config struct {
@@ -42,6 +43,15 @@ func New() (*Config, error) {
 	viper.SetConfigType("env")
 	viper.AutomaticEnv()
 
+	mongoURL := "mongodb://localhost:27017"
+	rabbitHost := "localhost"
+	if os.Getenv("DOCKER_ENV") == "1" {
+		rabbitHost = "rabbitmq"
+		mongoURL = "mongodb://mongodb:27017/message_bird"
+	}
+
+	rabbitMQURL := fmt.Sprintf("amqp://guest:guest@%s:5672/", rabbitHost)
+
 	err := viper.ReadInConfig()
 	if err != nil {
 		log.Error().Msg("Could not read the .env config file.")
@@ -50,10 +60,8 @@ func New() (*Config, error) {
 
 	requiredKeys := []string{
 		"PORT",
-		"MONGODB_HOST",
 		"MONGODB_NAME",
 		"WEBHOOK_SITE_URL",
-		"RABBITMQ_URL",
 	}
 
 	missingKeys := checkMissingKeys(requiredKeys)
@@ -70,14 +78,14 @@ func New() (*Config, error) {
 		Port: viper.GetInt("PORT"),
 	}
 	config.MongoDBConfig = MongoDBConfig{
-		Host: viper.GetString("MONGODB_HOST"),
+		Host: mongoURL,
 		Name: viper.GetString("MONGODB_NAME"),
 	}
 	config.WebhookConfig = WebhookConfig{
 		URL: viper.GetString("WEBHOOK_SITE_URL"),
 	}
 	config.RabbitMQConfig = RabbitMQConfig{
-		URL: viper.GetString("RABBITMQ_URL"),
+		URL: rabbitMQURL,
 	}
 
 	return config, nil

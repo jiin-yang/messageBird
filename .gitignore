@@ -32,5 +32,3 @@ out/
 .DS_Store
 .AppleDouble
 .LSOverride
-
-*.env

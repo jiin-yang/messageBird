@@ -6,6 +6,8 @@ import (
 	"net/http"
 )
 
+const RetryFailMessageSendFibonacciLimit = 3
+
 type Handler interface {
 	createMessage(ctx echo.Context) error
 }
@@ -31,6 +33,7 @@ func (h *handler) registerRoutes() {
 	h.echo.POST("/messages/cron/start", h.startCron)
 	h.echo.POST("/messages/cron/stop", h.stopCron)
 	h.echo.GET("/messages", h.getSentMessages)
+	h.echo.POST("/messages/queue/stop", h.stopQueue)
 }
 
 func (h *handler) createMessage(ctx echo.Context) error {
@@ -70,10 +73,14 @@ func (h *handler) startCron(ctx echo.Context) error {
 		})
 	}
 
-	h.cron.StartCron()
-	log.Info().Msg("Cron job started - handler")
+	go func() {
+		h.cron.StartCron()
+		h.useCase.StartConsumeFailures(ctx.Request().Context(), RetryFailMessageSendFibonacciLimit)
+		log.Info().Msg("Cron job and RabbitMQ consumer started - handler")
+	}()
+
 	return ctx.JSON(http.StatusOK, map[string]string{
-		"message": "Cron job started successfully - handler",
+		"message": "Cron job and RabbitMQ consumer are starting asynchronously - handler",
 	})
 }
 
@@ -86,9 +93,20 @@ func (h *handler) stopCron(ctx echo.Context) error {
 	}
 
 	h.cron.StopCron()
-	log.Info().Msg("Cron job stopped - handler")
+	//h.useCase.StopConsumeFailures()
+
+	log.Info().Msg("Cron job and RabbitMQ consumer stopped - handler")
 	return ctx.JSON(http.StatusOK, map[string]string{
-		"message": "Cron job stopped successfully - handler",
+		"message": "Cron job and RabbitMQ consumer stopped successfully - handler",
+	})
+}
+
+func (h *handler) stopQueue(ctx echo.Context) error {
+	h.useCase.StopConsumeFailures()
+
+	log.Info().Msg("RabbitMQ consumer stopped - handler")
+	return ctx.JSON(http.StatusOK, map[string]string{
+		"message": "RabbitMQ consumer stopped successfully - handler",
 	})
 }
 

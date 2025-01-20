@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/jiin-yang/messageBird/config"
 	"github.com/jiin-yang/messageBird/internal/client/webhook"
+	"github.com/jiin-yang/messageBird/internal/infra/rabbitmq"
 	"github.com/jiin-yang/messageBird/internal/infra/repository/mongoDB"
 	"github.com/jiin-yang/messageBird/internal/message"
 	mw "github.com/jiin-yang/messageBird/internal/middleware"
@@ -62,13 +63,20 @@ func (server *Server) Start() error {
 		URL: server.config.WebhookConfig.URL,
 	})
 
+	rabbitMQClient, err := rabbitmq.NewRabbitMQClient(server.config.RabbitMQConfig.URL, "fail_messages")
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize RabbitMQ client")
+	}
+	defer rabbitMQClient.Close()
+
 	messageRepository := mongoDB.NewMessageRepository(&mongoDB.NewMessageRepositoryOpts{
 		Client: mongoClient,
 	})
 
 	messageUseCase := message.NewUseCase(&message.NewUseCaseOptions{
-		Repo:    messageRepository,
-		Webhook: webhookClient,
+		Repo:     messageRepository,
+		Webhook:  webhookClient,
+		RabbitMQ: rabbitMQClient,
 	})
 
 	cronJob := message.NewCron(messageUseCase)

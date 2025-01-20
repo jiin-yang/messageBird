@@ -11,6 +11,7 @@ type Config struct {
 	ServerConfig
 	MongoDBConfig
 	WebhookConfig
+	RabbitMQConfig
 }
 
 type AppConfig struct {
@@ -27,6 +28,10 @@ type MongoDBConfig struct {
 }
 
 type WebhookConfig struct {
+	URL string
+}
+
+type RabbitMQConfig struct {
 	URL string
 }
 
@@ -48,6 +53,7 @@ func New() (*Config, error) {
 		"MONGODB_HOST",
 		"MONGODB_NAME",
 		"WEBHOOK_SITE_URL",
+		"RABBITMQ_URL",
 	}
 
 	missingKeys := checkMissingKeys(requiredKeys)
@@ -69,6 +75,9 @@ func New() (*Config, error) {
 	}
 	config.WebhookConfig = WebhookConfig{
 		URL: viper.GetString("WEBHOOK_SITE_URL"),
+	}
+	config.RabbitMQConfig = RabbitMQConfig{
+		URL: viper.GetString("RABBITMQ_URL"),
 	}
 
 	return config, nil

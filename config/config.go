@@ -10,6 +10,7 @@ type Config struct {
 	AppConfig
 	ServerConfig
 	MongoDBConfig
+	WebhookConfig
 }
 
 type AppConfig struct {
@@ -23,6 +24,10 @@ type ServerConfig struct {
 type MongoDBConfig struct {
 	Host string
 	Name string
+}
+
+type WebhookConfig struct {
+	URL string
 }
 
 func New() (*Config, error) {
@@ -42,6 +47,7 @@ func New() (*Config, error) {
 		"PORT",
 		"MONGODB_HOST",
 		"MONGODB_NAME",
+		"WEBHOOK_SITE_URL",
 	}
 
 	missingKeys := checkMissingKeys(requiredKeys)
@@ -60,6 +66,9 @@ func New() (*Config, error) {
 	config.MongoDBConfig = MongoDBConfig{
 		Host: viper.GetString("MONGODB_HOST"),
 		Name: viper.GetString("MONGODB_NAME"),
+	}
+	config.WebhookConfig = WebhookConfig{
+		URL: viper.GetString("WEBHOOK_SITE_URL"),
 	}
 
 	return config, nil

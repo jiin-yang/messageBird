@@ -4,3 +4,5 @@ PORT=8080
 
 MONGODB_HOST=mongodb://localhost:27017
 MONGODB_NAME=message_bird
+
+WEBHOOK_SITE_URL=https://webhook.site/70499edf-941c-4c18-98d9-c6b19f4b7558

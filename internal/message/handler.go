@@ -1,6 +1,7 @@
 package message
 
 import (
+	"context"
 	"github.com/labstack/echo/v4"
 	"github.com/rs/zerolog/log"
 	"net/http"
@@ -75,7 +76,7 @@ func (h *handler) startCron(ctx echo.Context) error {
 
 	go func() {
 		h.cron.StartCron()
-		h.useCase.StartConsumeFailures(ctx.Request().Context(), RetryFailMessageSendFibonacciLimit)
+		h.useCase.StartConsumeFailures(context.Background(), RetryFailMessageSendFibonacciLimit)
 		log.Info().Msg("Cron job and RabbitMQ consumer started - handler")
 	}()
 
@@ -95,9 +96,9 @@ func (h *handler) stopCron(ctx echo.Context) error {
 	h.cron.StopCron()
 	//h.useCase.StopConsumeFailures()
 
-	log.Info().Msg("Cron job and RabbitMQ consumer stopped - handler")
+	log.Info().Msg("Cron job stopped - handler")
 	return ctx.JSON(http.StatusOK, map[string]string{
-		"message": "Cron job and RabbitMQ consumer stopped successfully - handler",
+		"message": "Cron job stopped successfully - handler",
 	})
 }
 

@@ -17,11 +17,13 @@ type UseCase interface {
 }
 
 type useCase struct {
-	repo              Repository
-	webhook           webhook.Client
-	rabbitMQ          rabbitmq.Client
+	repo     Repository
+	webhook  webhook.Client
+	rabbitMQ rabbitmq.Client
+
+	mu                sync.Mutex
 	isConsumerRunning bool
-	consumerStopChan  chan bool
+	consumerCancel    context.CancelFunc
 }
 
 type NewUseCaseOptions struct {
@@ -32,11 +34,9 @@ type NewUseCaseOptions struct {
 
 func NewUseCase(opts *NewUseCaseOptions) UseCase {
 	return &useCase{
-		repo:              opts.Repo,
-		webhook:           opts.Webhook,
-		rabbitMQ:          opts.RabbitMQ,
-		isConsumerRunning: false,
-		consumerStopChan:  make(chan bool),
+		repo:     opts.Repo,
+		webhook:  opts.Webhook,
+		rabbitMQ: opts.RabbitMQ,
 	}
 }
 
@@ -123,6 +123,9 @@ func (u *useCase) SendMessages(ctx context.Context) error {
 }
 
 func (u *useCase) StartConsumeFailures(ctx context.Context, maxRetries int) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
 	if u.isConsumerRunning {
 		log.Warn().Msg("RabbitMQ consumer is already running")
 		return
@@ -131,46 +134,57 @@ func (u *useCase) StartConsumeFailures(ctx context.Context, maxRetries int) {
 	log.Info().Msg("Starting RabbitMQ consumer")
 	u.isConsumerRunning = true
 
-	retryTask := func(msg rabbitmq.FailedMessage) error {
-		log.Info().
-			Str("messageId", msg.MessageID).
-			Int("attempt", msg.Attempt).
-			Msg("Retrying failed message")
+	consumerCtx, cancel := context.WithCancel(ctx)
+	u.consumerCancel = cancel
 
-		req := webhook.SendMessageRequest{
-			To:      msg.PhoneNumber,
-			Content: msg.Content,
+	go func() {
+		defer func() {
+			u.mu.Lock()
+			u.isConsumerRunning = false
+			u.mu.Unlock()
+			log.Info().Msg("RabbitMQ consumer has stopped")
+		}()
+
+		retryTask := func(msg rabbitmq.FailedMessage) error {
+			log.Info().
+				Str("messageId", msg.MessageID).
+				Int("attempt", msg.Attempt).
+				Msg("Retrying failed message")
+
+			req := webhook.SendMessageRequest{
+				To:      msg.PhoneNumber,
+				Content: msg.Content,
+			}
+			resp, err := u.webhook.SendMessage(req)
+			if err != nil {
+				return err
+			}
+
+			log.Info().Msgf("Retry webhook response: %v %v", resp.ResponseId, resp.State)
+			return nil
 		}
-		_, err := u.webhook.SendMessage(req)
-		return err
-	}
 
-	var mutex sync.Mutex
+		updateStatus := func(messageID string, status uint8) error {
+			return u.repo.UpdateMessageStatus(ctx, messageID, Status(status))
+		}
 
-	updateStatus := func(messageID string, status uint8) error {
-		mutex.Lock()
-		defer mutex.Unlock()
-
-		err := u.repo.UpdateMessageStatus(ctx, messageID, Status(status))
+		err := u.rabbitMQ.ConsumeFailures(consumerCtx, retryTask, updateStatus, maxRetries)
 		if err != nil {
-			log.Error().Err(err).Str("messageId", messageID).Str("status", Status(status).String()).
-				Msg("Failed to update message status in MongoDB")
+			log.Error().Err(err).Msg("RabbitMQ consumer encountered an error")
 		}
-		return err
-	}
-
-	if err := u.rabbitMQ.ConsumeFailures(ctx, retryTask, updateStatus, maxRetries); err != nil {
-		log.Fatal().Err(err).Msg("Failed to start RabbitMQ consumer")
-	}
+	}()
 }
 
 func (u *useCase) StopConsumeFailures() {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+
 	if !u.isConsumerRunning {
 		log.Warn().Msg("RabbitMQ consumer is not running")
 		return
 	}
 
 	log.Info().Msg("Stopping RabbitMQ consumer")
-	close(u.consumerStopChan)
+	u.consumerCancel()
 	u.isConsumerRunning = false
 }

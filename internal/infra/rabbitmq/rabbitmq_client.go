@@ -134,59 +134,68 @@ func (c *client) ConsumeFailures(
 		return err
 	}
 
-	for delivery := range messages {
+	for {
 		select {
 		case <-ctx.Done():
-			log.Warn().Msg("Consumer stopped by context cancellation")
+			log.Info().Msg("Stopping consumer due to context cancellation")
 			return nil
-		default:
-		}
-
-		var failMsg FailedMessage
-		if err = json.Unmarshal(delivery.Body, &failMsg); err != nil {
-			log.Error().Err(err).Msg("Failed to parse message")
-			if err = updateStatus(failMsg.MessageID, uint8(Dead)); err != nil {
-				log.Error().Err(err).Msg("Failed to update message status to Dead - rabbitmq-unmarshall")
+		case delivery, ok := <-messages:
+			if !ok {
+				log.Warn().Msg("RabbitMQ messages channel closed")
+				return nil
 			}
-			_ = delivery.Ack(false)
-			continue
-		}
 
-		log.Info().Msgf("MessageId: %v, Content: %v, Attempt: %d", failMsg.MessageID, failMsg.Content, failMsg.Attempt)
-
-		if failMsg.Attempt >= maxRetries {
-			log.Warn().Str("messageId", failMsg.MessageID).Msg("Max retries reached, discarding message")
-			if err = updateStatus(failMsg.MessageID, uint8(Dead)); err != nil {
-				log.Error().Err(err).Msg("Failed to update message status to Dead - rabbitmq-maxRetries")
+			var failMsg FailedMessage
+			if err := json.Unmarshal(delivery.Body, &failMsg); err != nil {
+				log.Error().Err(err).Msg("Failed to parse message")
+				if err := updateStatus(failMsg.MessageID, uint8(Dead)); err != nil {
+					log.Error().Err(err).Str("messageId", failMsg.MessageID).Msg("Failed to update message status to Dead")
+				}
+				delivery.Ack(false)
+				continue
 			}
-			_ = delivery.Ack(false)
-			continue
-		}
 
-		if err = retryTask(failMsg); err != nil {
-			log.Error().Err(err).Str("messageId", failMsg.MessageID).Msg("Failed to process message, retrying")
-			failMsg.Attempt++
-			if failMsg.Attempt == 1 {
-				err = updateStatus(failMsg.MessageID, uint8(Fail))
-				log.Error().Err(err).Msg("Failed to update message status to Fail - rabbitmq-retryTask")
-			}
-			time.Sleep(time.Duration(fibonacci(failMsg.Attempt)) * time.Second)
+			log.Info().Msgf("Processing messageId: %v, Content: %v, Attempt: %d", failMsg.MessageID, failMsg.Content, failMsg.Attempt)
 
-			if err = c.PublishFailMessage(ctx, failMsg); err != nil {
-				log.Error().Err(err).Str("messageId", failMsg.MessageID).Msg("Failed to republish message for retry")
+			if failMsg.Attempt >= maxRetries {
+				log.Warn().Str("messageId", failMsg.MessageID).Msg("Max retries reached, discarding message")
+				if err := updateStatus(failMsg.MessageID, uint8(Dead)); err != nil {
+					log.Error().Err(err).Str("messageId", failMsg.MessageID).Msg("Failed to update message status to Dead")
+				}
+				delivery.Ack(false)
+				continue
 			}
-			_ = delivery.Ack(false)
 
-		} else {
-			log.Info().Str("messageId", failMsg.MessageID).Msg("Message sent successfully")
-			if err = updateStatus(failMsg.MessageID, uint8(Sent)); err != nil {
-				log.Error().Err(err).Msg("Failed to update message status to Sent - rabbitmq-retryTask")
+			err := retryTask(failMsg)
+			if err != nil {
+				log.Error().Err(err).Str("messageId", failMsg.MessageID).Msg("Failed to process message, retrying")
+
+				failMsg.Attempt++
+				waitSeconds := fibonacci(failMsg.Attempt) * 10
+				time.Sleep(time.Duration(waitSeconds) * time.Second)
+
+				err = c.PublishFailMessage(ctx, failMsg)
+				if err != nil {
+					log.Error().Err(err).Str("messageId", failMsg.MessageID).Msg("Failed to republish fail message to RabbitMQ")
+					if err := updateStatus(failMsg.MessageID, uint8(Dead)); err != nil {
+						log.Error().Err(err).Str("messageId", failMsg.MessageID).Msg("Failed to update message status to Dead")
+					}
+				} else {
+					if err := updateStatus(failMsg.MessageID, uint8(Fail)); err != nil {
+						log.Error().Err(err).Str("messageId", failMsg.MessageID).Msg("Failed to update message status to Fail")
+					}
+				}
+				delivery.Ack(false)
+			} else {
+				log.Info().Str("messageId", failMsg.MessageID).Msg("Message processed successfully")
+
+				if err := updateStatus(failMsg.MessageID, uint8(Sent)); err != nil {
+					log.Error().Err(err).Str("messageId", failMsg.MessageID).Msg("Failed to update message status to Sent")
+				}
+				delivery.Ack(false)
 			}
-			_ = delivery.Ack(false)
 		}
 	}
-
-	return nil
 }
 
 func fibonacci(n int) int {
